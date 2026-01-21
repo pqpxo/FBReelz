@@ -24,6 +24,7 @@ cp -r docker_setup/* /opt/fbreelz/
 
 ## 3) Put your cookies in place
 
+Cookies are obtained using ['cookies.txt' Firefox extension](https://github.com/hrdl-github/cookies-txt). Other methods will also work.
 ```bash
 mkdir -p /opt/fbreelz/secrets
 nano /opt/fbreelz/secrets/cookies.txt
