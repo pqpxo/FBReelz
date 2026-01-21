@@ -1,0 +1,10 @@
+# ## version 1
+[Unit]
+Description=Run FBReelz refresh daily
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
