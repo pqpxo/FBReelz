@@ -1,0 +1,17 @@
+## secrets
+cookies.txt
+secrets/
+*.env
+
+## runtime data
+data/cache/
+data/*.json
+data/*.m3u
+
+## python
+__pycache__/
+*.pyc
+.venv/
+
+## docker
+*.log
