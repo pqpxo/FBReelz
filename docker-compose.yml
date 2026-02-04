@@ -1,0 +1,11 @@
+# ## version 1
+services:
+  fbreelz:
+    build: .
+    container_name: fbreelz
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./secrets:/app/secrets:ro
+    environment:
+      - TZ=Europe/London

@@ -1,0 +1,6 @@
+## version 1
+playwright
+yt-dlp
+requests
+beautifulsoup4
+lxml
