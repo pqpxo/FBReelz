@@ -1,5 +1,6 @@
-
+<p align="center">
 <img src="https://github.com/pqpxo/logos/blob/main/reelz.fw.png" width="400">
+</p>
 
 # FBReelz
 
@@ -21,10 +22,12 @@ FBReelz is a headless-friendly toolchain for:
 - NGINX (host-level)
 
 ## Quick start
+
 ```bash
 cp secrets/cookies.example.txt secrets/cookies.txt
 docker compose up -d --build
 ```
+
 
 
 ---
