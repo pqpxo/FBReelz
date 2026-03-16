@@ -10,6 +10,8 @@ FBReelz is a headless-friendly toolchain for:
 - Generating M3U playlists
 - Serving content over NGINX
 
+> 📖 Full write-up on my blog: [makes.swakes.co.uk](https://makes.swakes.co.uk/fbreelz/)
+
 ## Features
 - Headless Playwright scraping
 - yt-dlp based downloads
