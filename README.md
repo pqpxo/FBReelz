@@ -45,9 +45,13 @@ Facebook's **Saved** list is easy to add to and hard to get anything back out of
 - deletes watched videos after a set number of days (Cleanup), so the cache doesn't grow forever
 - can send a Pushover notification when a download run finishes
 
+<br>
+
 <p align="center">
   <img src="docs/screenshot.jpg" width="640" alt="FBReelz player showing a saved video with the Mark, Phase 1, Phase 2, Cleanup, Purge, Restart and NGINX controls">
 </p>
+
+<br>
 
 > [!NOTE]
 > Full write-up, background and lessons learned: [makes.swakes.co.uk/fbreelz](https://makes.swakes.co.uk/fbreelz/)
