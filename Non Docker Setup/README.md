@@ -20,7 +20,8 @@ sudo apt install -y python3 python3-venv python3-pip nginx ffmpeg \
 ```bash
 sudo mkdir -p /opt/fbreelz
 sudo chown -R $USER:$USER /opt/fbreelz
-cp -r non_docker_setup/* /opt/fbreelz/
+git clone https://github.com/pqpxo/FBReelz.git /tmp/fbreelz
+cp -r "/tmp/fbreelz/Non Docker Setup/"* /opt/fbreelz/
 ```
 
 ## 3) Create venv + install dependencies
@@ -48,7 +49,7 @@ chmod 600 /opt/fbreelz/secrets/cookies.txt
 source /opt/fbreelz/.venv/bin/activate
 python /opt/fbreelz/fbreelz_phase1_playwright.py --max 30
 python /opt/fbreelz/fbreelz_phase2_resolve.py --download
-python /opt/fbreelz/make_cache_playlist.py --base-url http://YOUR_SERVER_IP/cache/ --out /opt/fbreelz/data/fbreelz_cache_http.m3u
+python /opt/fbreelz/make_cache_playlist.py --base-url http://YOUR_SERVER_IP/ --output /opt/fbreelz/data/fbreelz_cache_http.m3u
 ```
 
 ## 6) NGINX
