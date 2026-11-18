@@ -4,6 +4,8 @@
 
 <h1 align="center">FBReelz</h1>
 
+<br>
+
 <p align="center">
   Pull the videos you saved on Facebook down to your own server and swipe through them in a self-hosted, full-screen player.
 </p>
@@ -14,7 +16,7 @@
   <a href="#troubleshooting">Troubleshooting</a>
 </p>
 
-<br>
+
 
 ## Contents
 
