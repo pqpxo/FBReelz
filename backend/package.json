@@ -1,0 +1,17 @@
+{
+  "name": "fbreelz-backend",
+  "version": "1.0.0",
+  "description": "FBReelz video streaming backend",
+  "main": "server-wrapper.js",
+  "scripts": {
+    "start": "node server-wrapper.js",
+    "dev": "nodemon server-wrapper.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

@@ -1,0 +1,4 @@
+# Keep LF everywhere: shell scripts with CRLF break the container on start
+* text=auto eol=lf
+*.png binary
+*.ico binary

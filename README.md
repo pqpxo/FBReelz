@@ -1,226 +1,219 @@
 <p align="center">
-<img src="https://github.com/pqpxo/logos/blob/main/reelz.fw.png" width="400">
+  <img src="https://raw.githubusercontent.com/pqpxo/logos/main/reelz.fw.png" width="400" alt="FBReelz logo">
 </p>
 
-# FBReelz
+<h1 align="center">FBReelz</h1>
 
-FBReelz is a headless-friendly toolchain for:
-- Pulling Facebook Saved videos
-- Downloading reels/videos locally
-- Generating M3U playlists
-- Serving content over NGINX
+<p align="center">
+  Pull the videos you saved on Facebook down to your own server and swipe through them in a self-hosted, full-screen player.
+</p>
 
-> 📖 Full write-up on my blog: [makes.swakes.co.uk](https://makes.swakes.co.uk/fbreelz/)
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="https://makes.swakes.co.uk/fbreelz/">Blog write-up</a> ·
+  <a href="#troubleshooting">Troubleshooting</a>
+</p>
 
-## Features
-- Headless Playwright scraping
-- yt-dlp based downloads
-- HTTP-friendly playlists
-- Docker-first deployment
+<br>
+
+## Contents
+
+- [What it does](#what-it-does)
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Using the player](#using-the-player)
+- [Environment variables](#environment-variables)
+- [Ports and paths](#ports-and-paths)
+- [Command line](#command-line)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Repository layout](#repository-layout)
+- [Licence](#licence)
+
+<br>
+
+## What it does
+
+Facebook's **Saved** list is easy to add to and hard to get anything back out of. FBReelz:
+
+- scrolls your Saved page in headless Chromium (Playwright) using your browser cookies and collects every reel and video link
+- downloads each one as an MP4 with yt-dlp, skipping videos you have already watched and cleaned up
+- serves them in a swipeable, full-screen web player with watched marks, colour themes and an info panel
+- deletes watched videos after a set number of days (Cleanup), so the cache doesn't grow forever
+- can send a Pushover notification when a download run finishes
+
+> [!NOTE]
+> Full write-up, background and lessons learned: [makes.swakes.co.uk/fbreelz](https://makes.swakes.co.uk/fbreelz/)
+
+<br>
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[cookies.txt] --> B[Phase 1<br>Playwright scrape]
+    B -->|saved_items.json| C[Phase 2<br>yt-dlp download]
+    C -->|data/cache/*.mp4| D[Node server :3001]
+    D --> E[Web player]
+    E -->|mark watched| F[watched.json]
+    F -->|Cleanup after N days| C
+```
+
+Everything runs in one container. Supervisord keeps the Node server running, and the Node server runs the Python phases when you press **Phase 1** or **Phase 2** in the player.
+
+<br>
 
 ## Requirements
-- Docker + Docker Compose
-- Facebook cookies (Netscape format)
-- NGINX (host-level)
+
+- Linux host (Ubuntu or Raspberry Pi OS) with Docker and the Compose plugin
+- Your Facebook cookies in Netscape `cookies.txt` format, exported with the [cookies.txt Firefox extension](https://github.com/hrdl-github/cookies-txt) while logged in
+
+<br>
 
 ## Quick start
 
+**1. Clone the repo**
+
 ```bash
-cp secrets/cookies.example.txt secrets/cookies.txt
+git clone https://github.com/pqpxo/FBReelz.git fbreelz
+cd fbreelz
+```
+
+**2. Set an admin password**
+
+```bash
+cp .env.example .env
+nano .env                       # set ADMIN_PASSWORD
+```
+
+> [!IMPORTANT]
+> The admin controls (Phase 1/2, Cleanup, Purge, Cookie Manager) stay locked until `ADMIN_PASSWORD` is set. There is no default password.
+
+**3. Add your cookies**
+
+```bash
+mkdir -p data secrets
+nano secrets/cookies.txt        # paste the exported cookies
+chmod 600 secrets/cookies.txt
+```
+
+You can also paste cookies later from the 🍪 Cookie Manager in the player.
+
+**4. Start it**
+
+```bash
 docker compose up -d --build
 ```
 
+Open `http://<server-ip>:3001`, log in, then press **Phase 1** and **Phase 2**.
 
+<br>
 
----
-<br />
+## Using the player
 
-# Docker setup
+| Control | What it does |
+| --- | --- |
+| Swipe / scroll | Next or previous video |
+| **Mark** | Mark the current video as watched. Watched videos are dimmed and don't autoplay |
+| **Phase 1** | Scrape your Saved list (up to 30 items) |
+| **Phase 2** | Download anything new from the last Phase 1 run |
+| **Cleanup** | Delete videos marked watched more than `RETENTION_DAYS` ago. They are not downloaded again |
+| **Purge** | Delete every downloaded video. Cannot be undone |
+| **Restart** | Restart the Node server inside the container |
+| 🍪 | Cookie Manager: see cookie count and age, paste new cookies |
+| ⓘ / 🎨 / ☀ | Info panel, colour scheme, light or dark |
 
-This option:
-- runs your FBReelz scripts inside a container called `fbreelz`
-- keeps cookies and data on the host under `/opt/fbreelz/`
-- uses **NGINX on the host** to serve the web UI + cached MP4s + playlists
+Admin buttons ask for the password once. The login lasts until you log out or the container restarts.
 
-### 1) Install prerequisites (Ubuntu)
+<br>
 
-```bash
-sudo apt update
-sudo apt install -y docker.io docker-compose-plugin nginx
-sudo systemctl enable --now docker nginx
-```
+## Environment variables
 
-### 2) Copy this folder to the new host
+Set these in `.env`. Docker Compose reads it automatically.
 
-Recommended destination:
-```bash
-sudo mkdir -p /opt/fbreelz
-sudo chown -R $USER:$USER /opt/fbreelz
-cp -r docker_setup/* /opt/fbreelz/
-```
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ADMIN_PASSWORD` | none | **Required.** Password for the admin controls |
+| `FBREELZ_PORT` | `3001` | Host port for the player |
+| `RETENTION_DAYS` | `3` | Days a watched video is kept before Cleanup deletes it |
+| `PUSHOVER_USER_KEY` | none | Pushover user key. Leave blank to turn notifications off |
+| `PUSHOVER_APP_TOKEN` | none | Pushover application token |
+| `TZ` | `Europe/London` | Timezone for logs |
 
-### 3) Put your cookies in place
+<br>
 
-Cookies are obtained using the [`cookies.txt` Firefox extension](https://github.com/hrdl-github/cookies-txt).
+## Ports and paths
 
-```bash
-mkdir -p /opt/fbreelz/secrets
-nano /opt/fbreelz/secrets/cookies.txt
-chmod 600 /opt/fbreelz/secrets/cookies.txt
-```
+| Item | Where |
+| --- | --- |
+| Web player and API | host port `FBREELZ_PORT` (default `3001`), plain HTTP |
+| Videos, `watched.json`, logs | `./data` → `/app/data` |
+| `cookies.txt` | `./secrets` → `/app/secrets` |
 
-### 4) Build + start container
+`./data` and `./secrets` are bind mounts, so videos, watched marks and cookies survive `docker compose down` and rebuilds.
 
-```bash
-cd /opt/fbreelz
-docker compose up -d --build
-docker exec -it fbreelz python /app/fbreelz_phase1_graphql.py --max 30
-docker exec -it fbreelz python /app/fbreelz_phase2_resolve.py --download
-```
+> [!TIP]
+> To reach it from outside your LAN, put it behind a reverse proxy with TLS (Nginx Proxy Manager, Caddy) and point the proxy at port 3001.
 
-### 5) Generate HTTP playlist for remote streaming (LAN)
+<br>
 
-This creates `/opt/fbreelz/data/fbreelz_cache_http.m3u` pointing at your server IP.
-
-```bash
-python3 /opt/fbreelz/make_cache_playlist.py \
-  --base-url http://YOUR_SERVER_IP/cache/ \
-  --out /opt/fbreelz/data/fbreelz_cache_http.m3u
-```
-
-### 6) NGINX
+## Command line
 
 ```bash
-sudo cp /opt/fbreelz/nginx/fbreelz.conf /etc/nginx/sites-available/fbreelz
-sudo ln -sf /etc/nginx/sites-available/fbreelz /etc/nginx/sites-enabled/fbreelz
-sudo nginx -t && sudo systemctl reload nginx
+docker exec -it fbreelz python /app/scripts/fbreelz_phase1_playwright.py --max 30
+docker exec -it fbreelz python /app/scripts/fbreelz_phase2_resolve.py --download
+docker exec -it fbreelz python /app/tests/test_smoke.py
+docker compose logs -f
 ```
 
-Then open:
-- `http://YOUR_SERVER_IP/` (Web UI)
-- `http://YOUR_SERVER_IP/fbreelz_cache_http.m3u` (playlist)
+Phase 2 also takes `--max N`, `--force` (download again), `--no-filter` (ignore cleaned list), `--no-pushover` and `--fallback-curl`. Logs are written to `data/fbreelz_phase1.log`, `data/fbreelz_phase2.log` and `data/backend.log`.
 
----
-<br />
+<br>
 
-# Web UI Setup (NGINX-served)
+## Troubleshooting
 
-The FBReelz Web UI is a **static frontend** served directly by NGINX on the host.
-It does **not** run inside Docker and does **not** require Node.js at runtime.
+| Symptom | Fix |
+| --- | --- |
+| Phase 1: `Not logged in` or `No video/reel links found` | Cookies have expired. Export them again while logged in and paste them into the Cookie Manager. `data/debug_playwright_saved.html` shows what Playwright saw |
+| Phase 2 downloads fail | Facebook changes often. Bump `yt-dlp` in `requirements.txt` and run `docker compose up -d --build` |
+| Admin login always says "Invalid password" | `ADMIN_PASSWORD` is empty or wasn't picked up. Set it in `.env`, then `docker compose up -d` |
+| Admin buttons send you back to the login | The container restarted, which clears logins. Log in again |
+| Container shows `unhealthy` | `docker compose logs fbreelz` and check `data/backend-error.log` |
 
-### Architecture overview
+<br>
 
-```
-Browser
-  ├─ /                → Static Web UI (HTML / JS / CSS)
-  ├─ /cache/*.mp4     → Downloaded Facebook videos
-  ├─ /fbreelz_*.m3u   → Playlists
-  └─ /api/*           → (optional) backend
-```
+## Security
 
-Docker is only responsible for **scraping, downloading, and playlist generation**.
+> [!CAUTION]
+> `cookies.txt` is a live login to your Facebook account. Anyone who can read it can act as you.
 
----
+- Keep `secrets/cookies.txt` at `chmod 600`. The Cookie Manager writes it, and its backups, as `600`.
+- Admin routes need a login. The password is compared in constant time and sessions are random tokens held in memory.
+- The player serves plain HTTP. Keep it on your LAN, or put it behind a reverse proxy with TLS before exposing it.
+- Only download content you have the right to keep, and for personal use.
 
-### Web UI directory structure
+<br>
+
+## Repository layout
 
 ```text
-/var/www/fbreelz/
-├── index.html
-├── assets/
-│   ├── app.js
-│   ├── styles.css
-│   └── icons/
+.
+├── Dockerfile                    # Python + Node + Chromium, supervisord
+├── docker-compose.yml
+├── .env.example                  # copy to .env
+├── fbreelz_phase1_playwright.py  # scrape Saved list
+├── fbreelz_phase2_resolve.py     # download with yt-dlp
+├── cleaned_videos_filter.py      # skip videos already cleaned up
+├── make_cache_playlist.py        # optional: M3U playlist for VLC
+├── backend/                      # Node API + cleanup module
+├── deploy/                       # server-wrapper.js, supervisord, entrypoint
+├── web/                          # player (React, no build step)
+└── tests/test_smoke.py
 ```
 
-Update the NGINX `root` directive if you change this path.
+<br>
 
----
+## Licence
 
-### Copy the Web UI to the host
-
-```bash
-sudo mkdir -p /var/www/fbreelz
-sudo cp -r web_ui/* /var/www/fbreelz/
-sudo chown -R www-data:www-data /var/www/fbreelz
-```
-
-Permissions:
-
-```bash
-sudo find /var/www/fbreelz -type d -exec chmod 755 {} \;
-sudo find /var/www/fbreelz -type f -exec chmod 644 {} \;
-```
-
----
-
-### How videos are exposed
-
-Videos are downloaded to:
-
-```text
-/opt/fbreelz/data/cache/*.mp4
-```
-
-NGINX exposes them as:
-
-```
-http://YOUR_SERVER_IP/cache/*.mp4
-```
-
----
-
-### Playlists
-
-Local:
-```text
-/opt/fbreelz/data/fbreelz_cache.m3u
-```
-
-LAN / remote:
-```text
-/opt/fbreelz/data/fbreelz_cache_http.m3u
-```
-
-Example entry:
-
-```m3u
-#EXTINF:97,Ten Years of Dancehall
-http://192.168.x.xxx/cache/facebook_2107482286680757.mp4
-```
-
----
-
-### NGINX video notes
-
-Recommended:
-- `sendfile on`
-- `tcp_nopush on`
-- correct MIME types for `.mp4` and `.m3u`
-
-Avoid:
-- `aio on`
-- gzip on video files
-
----
-
-### Access points
-
-- Web UI: `http://YOUR_SERVER_IP/`
-- Playlist: `http://YOUR_SERVER_IP/fbreelz_cache_http.m3u`
-- Videos: `http://YOUR_SERVER_IP/cache/`
-
----
-
-### Security notes
-
-- Never expose `cookies.txt`
-- Restrict `/opt/fbreelz/secrets`
-- Use HTTPS if exposed beyond LAN
-
----
-
-## License
-
-Private / internal use. Adjust as required.
-
+No licence file yet. Personal project, provided as is.

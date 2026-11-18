@@ -1,11 +1,29 @@
-# ## version 1
+# FBReelz
+#
+#   1. cp .env.example .env   and set ADMIN_PASSWORD
+#   2. put your Facebook cookies in secrets/cookies.txt
+#   3. docker compose up -d --build
+#
+# Web player: http://<host>:${FBREELZ_PORT:-3001}
+
 services:
   fbreelz:
     build: .
     container_name: fbreelz
     restart: unless-stopped
+
+    ports:
+      - "${FBREELZ_PORT:-3001}:3001"
+
     volumes:
+      # Videos, watched.json, logs
       - ./data:/app/data
-      - ./secrets:/app/secrets:ro
+      # cookies.txt (read-write so the web Cookie Manager can update it)
+      - ./secrets:/app/secrets
+
     environment:
-      - TZ=Europe/London
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - RETENTION_DAYS=${RETENTION_DAYS:-3}
+      - PUSHOVER_USER_KEY=${PUSHOVER_USER_KEY:-}
+      - PUSHOVER_APP_TOKEN=${PUSHOVER_APP_TOKEN:-}
+      - TZ=${TZ:-Europe/London}
