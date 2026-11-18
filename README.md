@@ -1,307 +1,138 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/pqpxo/logos/main/reelz.fw.png" width="400" alt="FBReelz logo">
-</p>
+# FBReelz Docker Deployment Package
 
-<h1 align="center">FBReelz</h1>
+Self-contained Docker package for deploying FBReelz on remote hosts.
 
-<p align="center">
-  Pull the videos you saved on Facebook down to your own server, then watch them in VLC or a swipeable web player.
-</p>
+## Quick Start
 
-<p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="https://makes.swakes.co.uk/fbreelz/">Blog write-up</a> ·
-  <a href="#troubleshooting">Troubleshooting</a>
-</p>
+1. **Copy this entire directory to your remote host**
 
-<br>
+2. **Add your Facebook cookies**
+   ```bash
+   # Create cookies file in Netscape format
+   nano secrets/cookies.txt
+   ```
 
-## Contents
+3. **Build and start the container**
+   ```bash
+   docker-compose up -d --build
+   ```
 
-- [What it does](#what-it-does)
-- [How it works](#how-it-works)
-- [Requirements](#requirements)
-- [Quick start](#quick-start)
-- [Serve videos and playlists with NGINX](#serve-videos-and-playlists-with-nginx)
-- [Web player (optional)](#web-player-optional)
-- [Script reference](#script-reference)
-- [Environment variables](#environment-variables)
-- [Ports and paths](#ports-and-paths)
-- [Run it on a schedule](#run-it-on-a-schedule)
-- [Troubleshooting](#troubleshooting)
-- [Security](#security)
-- [Repository layout](#repository-layout)
-- [Licence](#licence)
+4. **Access the application**
+   - Web UI: `http://your-host:3001`
+   - API: `http://your-host:3001/api/`
 
-<br>
+## Directory Structure
 
-## What it does
-
-Facebook's **Saved** list is easy to add to and hard to get anything back out of. FBReelz:
-
-- opens your Saved page in headless Chromium (Playwright) using your browser cookies
-- collects the reel and video links it finds
-- downloads each one as an MP4 with yt-dlp
-- writes M3U playlists you can open in VLC, locally or across your LAN
-- lets NGINX serve the MP4s, the playlists and an optional TikTok-style web player
-
-> [!NOTE]
-> Full write-up, background and lessons learned: [makes.swakes.co.uk/fbreelz](https://makes.swakes.co.uk/fbreelz/)
-
-<br>
-
-## How it works
-
-```mermaid
-flowchart LR
-    A[cookies.txt] --> B[Phase 1<br>Playwright scrape]
-    B -->|saved_items.json| C[Phase 2<br>yt-dlp resolve + download]
-    C -->|cache/*.mp4| D[NGINX on host]
-    C -->|*.m3u playlists| D
-    D --> E[VLC]
-    D --> F[Web player]
+```
+fbreelz_docker/
+├── Dockerfile              # Container build instructions
+├── docker-compose.yml      # Deployment configuration
+├── requirements.txt        # Python dependencies
+├── backend/                # Node.js API server
+├── web/                    # Frontend web application
+├── deploy/                 # Deployment configs (supervisord, entrypoint)
+├── *.py                    # Python scraping scripts
+├── data/                   # Persistent data (videos, state) - mounted volume
+│   └── cache/              # Downloaded videos
+└── secrets/                # Sensitive files - mounted volume
+    └── cookies.txt         # Facebook cookies (you must create this)
 ```
 
-The Docker container is a toolbox. It sleeps until you run a phase with `docker exec`. NGINX runs on the host, not in Docker, and serves whatever lands in `./data`.
+## Configuration
 
-<br>
+### Environment Variables
 
-## Requirements
+Set in `docker-compose.yml`:
 
-- Linux host (Ubuntu or Raspberry Pi OS) with Docker and the Compose plugin
-- NGINX on the host
-- Your Facebook cookies in Netscape `cookies.txt` format, exported with the [cookies.txt Firefox extension](https://github.com/hrdl-github/cookies-txt) while logged in
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3001` | Backend server port |
+| `ADMIN_PASSWORD` | `admin123` | Admin panel password (CHANGE THIS!) |
+| `FBREELZ_DATA_DIR` | `/app/data` | Data directory inside container |
+| `FBREELZ_COOKIES` | `/app/secrets/cookies.txt` | Cookies file path |
 
-<br>
+### Changing Admin Password
 
-## Quick start
+Edit `docker-compose.yml` and uncomment/modify the `ADMIN_PASSWORD` line:
+```yaml
+environment:
+  - ADMIN_PASSWORD=your_secure_password
+```
 
-> [!TIP]
-> Clone into `/opt/fbreelz`. The NGINX config and the defaults in the scripts all expect that path.
+Then restart: `docker-compose up -d`
 
-**1. Install prerequisites (Ubuntu)**
+## Management Commands
 
 ```bash
-sudo apt update
-sudo apt install -y docker.io docker-compose-plugin nginx git
-sudo systemctl enable --now docker nginx
+# View logs
+docker-compose logs -f
+
+# Restart container
+docker-compose restart
+
+# Stop container
+docker-compose down
+
+# Rebuild after changes
+docker-compose up -d --build
+
+# Execute commands inside container
+docker exec -it fbreelz bash
+
+# Run Phase 1 manually
+docker exec -it fbreelz python /app/scripts/fbreelz_phase1_playwright.py --max 30
+
+# Run Phase 2 manually
+docker exec -it fbreelz python /app/scripts/fbreelz_phase2_resolve.py --download
 ```
 
-**2. Clone the repo**
+## Cookies Format
 
-```bash
-sudo git clone https://github.com/pqpxo/FBReelz.git /opt/fbreelz
-sudo chown -R $USER:$USER /opt/fbreelz
-cd /opt/fbreelz
+The `secrets/cookies.txt` file must be in Netscape cookie format. You can export cookies from your browser using extensions like "Get cookies.txt" or "EditThisCookie".
+
+Required cookies for Facebook: `c_user`, `xs`, `datr`, `fr`
+
+## Reverse Proxy (Optional)
+
+To serve behind nginx with HTTPS:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
 ```
-
-**3. Add your cookies and settings**
-
-```bash
-mkdir -p data secrets
-nano secrets/cookies.txt        # paste the exported cookies
-chmod 600 secrets/cookies.txt
-cp .env.example .env
-nano .env                       # set FBREELZ_HTTP_BASE to http://<this server's IP>
-```
-
-> [!NOTE]
-> The container runs as UID 1000, the default first user on Ubuntu and Raspberry Pi OS. `data/` and `secrets/cookies.txt` must be owned by that user. Create them yourself before the first `up` so Docker doesn't create them as root.
-
-**4. Build and start the container**
-
-```bash
-docker compose up -d --build
-```
-
-**5. Scrape your Saved list, then download**
-
-```bash
-docker exec -it fbreelz python /app/fbreelz_phase1_graphql.py --max 30
-docker exec -it fbreelz python /app/fbreelz_phase2_resolve.py --download
-```
-
-Videos land in `/opt/fbreelz/data/cache/` and playlists in `/opt/fbreelz/data/`.
-
-> [!IMPORTANT]
-> `FBREELZ_HTTP_BASE` is written into every entry of `fbreelz_cache_http.m3u`, so it must be the address other devices use to reach this server.
-
-<br>
-
-## Serve videos and playlists with NGINX
-
-```bash
-sudo cp /opt/fbreelz/nginx/fbreelz.conf /etc/nginx/sites-available/fbreelz
-sudo ln -sf /etc/nginx/sites-available/fbreelz /etc/nginx/sites-enabled/fbreelz
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-Then, from any device on your LAN:
-
-| What | URL |
-| --- | --- |
-| Playlist for VLC | `http://YOUR_SERVER_IP/fbreelz_cache_http.m3u` |
-| A single video | `http://YOUR_SERVER_IP/cache/facebook_<id>.mp4` |
-| Web player | `http://YOUR_SERVER_IP/` (after the next section) |
-
-In VLC use **Media > Open Network Stream** and paste the playlist URL.
-
-> [!TIP]
-> If another site already owns port 80, change `listen 80;` in `nginx/fbreelz.conf` or add `server_name` before enabling it. The playlist URLs must match whatever port you use.
-
-<br>
-
-## Web player (optional)
-
-A swipeable, full-screen player for the cached MP4s. It is a static React page plus a tiny Node API (`/api/videos`) that lists the cache folder. Neither runs in Docker.
-
-`web_ui_setup_script.sh` generates the files and an installer, then zips them:
-
-```bash
-sudo apt install -y zip unzip
-cd /opt/fbreelz
-bash web_ui_setup_script.sh
-unzip fbreelz-package.zip
-cd fbreelz-package
-sudo ./install.sh
-```
-
-`install.sh` installs NGINX, Node.js and npm, copies the page to `/var/www/fbreelz`, installs the API to `/opt/fbreelz-server` and starts it as the `fbreelz-api` systemd service (user `www-data`) on `localhost:3001`.
-
-> [!TIP]
-> Set up [NGINX](#serve-videos-and-playlists-with-nginx) first. `install.sh` keeps an existing `fbreelz` site, and the repo's config already proxies `/api/` to the Node service.
-
-> [!NOTE]
-> The page loads React, Babel and Tailwind from public CDNs, so the viewing device needs internet access.
-
-<br>
-
-## Script reference
-
-All scripts run inside the container with `docker exec -it fbreelz python /app/<script> ...`.
-
-**Phase 1: `fbreelz_phase1_graphql.py`** (Playwright scraper, copied from `scripts/fbreelz_phase1_playwright.py`)
-
-| Flag | Default | What it does |
-| --- | --- | --- |
-| `--max N` | `30` | Maximum saved items to capture |
-| `--headed` | off | Show the browser window. Needs a display or `xvfb-run` |
-
-Writes `saved_items.json` and `debug_playwright_saved.html` to the data folder.
-
-**Phase 2: `fbreelz_phase2_resolve.py`** (yt-dlp resolver and downloader)
-
-| Flag | Default | What it does |
-| --- | --- | --- |
-| `--download` | off | Download MP4s to `data/cache/` and write the cache playlist |
-| `--http-base URL` | `$FBREELZ_HTTP_BASE` | Also write `fbreelz_cache_http.m3u` with full URLs, e.g. `http://192.168.1.50` |
-| `--max N` | `200` | Maximum items to process |
-| `--no-ytdlp` | off | Skip yt-dlp and write a playlist of the original Facebook links |
-| `--user-agent UA` | `$FBREELZ_UA` | User agent passed to yt-dlp |
-| `--playlist-title T` | `FBReelz` | Title written into the M3U files |
-| `--input`, `--output`, `--m3u`, `--cache-m3u`, `--http-m3u` | under `$FBREELZ_DATA_DIR` | Override file paths |
-
-**Rebuild the HTTP playlist only: `make_cache_playlist.py`** (runs on the host, not in the container)
-
-```bash
-python3 /opt/fbreelz/make_cache_playlist.py --base-url http://YOUR_SERVER_IP/
-```
-
-Use the server root as `--base-url`. The script adds `cache/` itself.
-
-<br>
-
-## Environment variables
-
-Set these in `.env` (copied from [`.env.example`](.env.example)). Docker Compose reads it automatically.
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FBREELZ_HTTP_BASE` | none | Base URL written into `fbreelz_cache_http.m3u`, e.g. `http://192.168.1.50`. Without it, only the local playlists are written |
-| `TZ` | `Europe/London` | Timezone for timestamps |
-| `FBREELZ_UA` | Chrome 120 on Linux | Browser user agent for Playwright and yt-dlp |
-
-`docker-compose.yml` also sets these to the container's mount points. Only change them for a non-Docker install:
-
-| Variable | Default outside Docker | In Docker |
-| --- | --- | --- |
-| `FBREELZ_DATA_DIR` | `/opt/fbreelz/data` | `/app/data` |
-| `FBREELZ_COOKIES` | `/opt/fbreelz/secrets/cookies.txt` | `/app/secrets/cookies.txt` |
-
-<br>
-
-## Ports and paths
-
-| Item | Where |
-| --- | --- |
-| NGINX (videos, playlists, web player) | host port `80` |
-| Web player API (`fbreelz-api`) | `localhost:3001`, proxied at `/api/` |
-| FBReelz container | no ports exposed |
-| Cookies | `/opt/fbreelz/secrets/cookies.txt` → `/app/secrets` (read-only) |
-| Data, playlists, MP4s | `/opt/fbreelz/data/` → `/app/data` |
-
-`./data` is a bind mount, so downloads survive `docker compose down` and rebuilds.
-
-<br>
-
-## Run it on a schedule
-
-Add a nightly refresh with `crontab -e` on the host:
-
-```cron
-15 2 * * * docker exec fbreelz sh -c 'python /app/fbreelz_phase1_graphql.py --max 30 && python /app/fbreelz_phase2_resolve.py --download' >> /opt/fbreelz/data/refresh.log 2>&1
-```
-
-A systemd timer for non-Docker installs is in [`Non Docker Setup/systemd`](Non%20Docker%20Setup/systemd/INSTALL.md).
-
-<br>
 
 ## Troubleshooting
 
-| Symptom | Fix |
-| --- | --- |
-| `No reel/video links found in HTML` | Cookies have expired. Export them again while logged in to Facebook. Open `data/debug_playwright_saved.html` to see what Playwright saw |
-| `Facebook is not available on this browser` | Phase 1 retries `m.facebook.com` automatically. If both fail, refresh cookies or set `FBREELZ_UA` |
-| Downloads fail with yt-dlp errors | Facebook changes often. Rebuild to pull the latest yt-dlp: `docker compose build --no-cache && docker compose up -d` |
-| VLC shows 404 for every entry | The playlist URLs do not match NGINX. Fix `FBREELZ_HTTP_BASE` in `.env`, then `docker compose up -d` and re-run Phase 2 |
-| `Permission denied` writing to `/app/data` | `data/` is owned by root, usually because Docker created it or an older version ran as root. Fix with `sudo chown -R 1000:1000 /opt/fbreelz/data` |
-| Web player says "Failed to connect to server" | Check the API: `systemctl status fbreelz-api` and `curl http://localhost:3001/api/health` |
-
-<br>
-
-## Security
-
-> [!CAUTION]
-> `cookies.txt` is a live login to your Facebook account. Anyone who reads it can act as you.
-
-- Keep `secrets/cookies.txt` at `chmod 600`. It is gitignored and mounted read-only into the container. Phase 2's working copy, `data/cookies_runtime.txt`, is also written as `600`.
-- The container runs as a non-root user (UID 1000).
-- NGINX never serves `secrets/`. Keep it that way if you edit the config.
-- Keep this on your LAN. If you expose it, put it behind a reverse proxy with TLS and authentication.
-- Only download content you have the right to keep, and for personal use.
-
-<br>
-
-## Repository layout
-
-```text
-.
-├── docker-compose.yml        # fbreelz toolbox container
-├── Dockerfile
-├── requirements.txt
-├── scripts/
-│   ├── fbreelz_phase1_playwright.py
-│   └── fbreelz_phase2_resolve.py
-├── make_cache_playlist.py    # rebuild the HTTP playlist from resolved_items.json
-├── nginx/fbreelz.conf        # host NGINX site: player, /cache/, playlists, /api/
-├── web_ui_setup_script.sh    # generates the web player + Node API package
-├── tests/test_smoke.py      # python tests/test_smoke.py
-├── .env.example              # copy to .env
-└── Non Docker Setup/         # venv + systemd install guide and timer
+**Container won't start:**
+```bash
+docker-compose logs fbreelz
 ```
 
-<br>
+**Phase 1 fails (cookies issue):**
+- Verify cookies.txt exists and is readable
+- Re-export fresh cookies from browser
+- Check cookies contain `c_user` and `xs`
 
-## Licence
+**No videos appearing:**
+- Run Phase 1 first (scrape), then Phase 2 (download)
+- Check `data/fbreelz_phase1.log` and `data/fbreelz_phase2.log`
 
-No licence file yet. Personal project, provided as is.
+**Health check failing:**
+```bash
+docker exec -it fbreelz curl http://localhost:3001/api/health
+```

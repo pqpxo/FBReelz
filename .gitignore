@@ -1,15 +1,15 @@
 ## secrets
-cookies.txt
+.env
 secrets/
-*.env
+cookies.txt
 
-## runtime data (includes cookies_runtime.txt)
+## runtime data (videos, logs, watched.json)
 data/
 
-## python
+## node / python
+node_modules/
 __pycache__/
 *.pyc
 .venv/
-
-## docker
 *.log
+*.bak*

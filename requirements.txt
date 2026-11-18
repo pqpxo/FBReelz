@@ -1,4 +1,12 @@
-## version 2
-playwright==1.64.1
-# yt-dlp is left unpinned on purpose: Facebook changes often and a rebuild should pull the latest extractor fixes
-yt-dlp
+# FBReelz Python Requirements
+# Enhanced version with all dependencies
+
+# Web scraping
+requests==2.32.3
+beautifulsoup4==4.12.3
+
+# Video download
+yt-dlp==2025.12.8
+
+# Browser automation
+playwright==1.50.0

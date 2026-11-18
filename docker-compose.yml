@@ -1,19 +1,53 @@
-# ## version 2
+version: '3.8'
+
+# FBReelz Docker Compose for Remote Deployment
+#
+# Usage:
+#   1. Copy this directory to your remote host
+#   2. Create secrets/cookies.txt with your Facebook cookies
+#   3. Run: docker-compose up -d --build
+#
+# The application will be available at http://your-host:3001
+
 services:
   fbreelz:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: fbreelz
     restart: unless-stopped
+
+    ports:
+      - "3001:3001"
+
     volumes:
+      # Persistent data directory (videos, playlists, logs, state files)
       - ./data:/app/data
-      - ./secrets:/app/secrets:ro
+
+      # Secrets directory (cookies file)
+      - ./secrets:/app/secrets
+
     environment:
-      - TZ=${TZ:-Europe/London}
       - FBREELZ_DATA_DIR=/app/data
       - FBREELZ_COOKIES=/app/secrets/cookies.txt
-      - FBREELZ_HTTP_BASE=${FBREELZ_HTTP_BASE:-}
-      - FBREELZ_UA=${FBREELZ_UA:-}
+      - VIDEO_DIR=/app/data/cache
+      - WATCHED_FILE=/app/data/watched.json
+      - PORT=3001
+      - PYTHONUNBUFFERED=1
+      # Uncomment and change to set a custom admin password:
+      # - ADMIN_PASSWORD=your_secure_password
+
+    # Health check
     healthcheck:
-      test: ["CMD", "python", "-c", "import os, playwright; assert os.access('/app/data', os.W_OK)"]
-      interval: 5m
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
       timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    networks:
+      - fbreelz_network
+
+networks:
+  fbreelz_network:
+    driver: bridge
