@@ -24,6 +24,7 @@
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
+- [Getting your Facebook cookies](#getting-your-facebook-cookies)
 - [Using the player](#using-the-player)
 - [Environment variables](#environment-variables)
 - [Ports and paths](#ports-and-paths)
@@ -77,7 +78,7 @@ Everything runs in one container. Supervisord keeps the Node server running, and
 ## Requirements
 
 - Linux host (Ubuntu or Raspberry Pi OS) with Docker and the Compose plugin
-- Your Facebook cookies in Netscape `cookies.txt` format, exported with the [cookies.txt Firefox extension](https://github.com/hrdl-github/cookies-txt) while logged in
+- Your Facebook cookies in Netscape `cookies.txt` format. See [Getting your Facebook cookies](#getting-your-facebook-cookies)
 
 <br>
 
@@ -104,11 +105,9 @@ nano .env                       # set ADMIN_PASSWORD
 
 ```bash
 mkdir -p data secrets
-nano secrets/cookies.txt        # paste the exported cookies
-chmod 600 secrets/cookies.txt
 ```
 
-You can also paste cookies later from the 🍪 Cookie Manager in the player.
+Then export and save your cookies as described in [Getting your Facebook cookies](#getting-your-facebook-cookies). You can do this after step 4 using the player's Cookie Manager.
 
 **4. Start it**
 
@@ -117,6 +116,79 @@ docker compose up -d --build
 ```
 
 Open `http://<server-ip>:3001`, log in, then press **Phase 1** and **Phase 2**.
+
+<br>
+
+## Getting your Facebook cookies
+
+FBReelz logs in to Facebook with cookies copied from a browser where you are already logged in. No password is stored.
+
+**1. Install a cookies.txt extension**
+
+| Browser | Extension | Licence |
+| --- | --- | --- |
+| Firefox | [cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/) ([source](https://github.com/hrdl-github/cookies-txt)) | GPL-3.0 |
+| Chrome / Edge | [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) ([source](https://github.com/kairi003/Get-cookies.txt-LOCALLY)) | MIT |
+
+> [!WARNING]
+> A cookie extension can read every login in your browser. Install only these open-source ones, from the store links above.
+
+**2. Log in to [facebook.com](https://www.facebook.com)** in that browser and open any page, such as your Saved list.
+
+**3. Export the cookies for facebook.com**
+
+- **cookies.txt (Firefox):** click its toolbar icon. In the **current site** row, either copy to the clipboard or download (saves `cookies.txt`).
+- **Get cookies.txt LOCALLY:** click its icon, leave the format on **Netscape**, then **Copy**, or **Export** (saves `www.facebook.com_cookies.txt`).
+
+**4. Check it.** The text starts with `# Netscape HTTP Cookie File` and has tab-separated lines for `c_user` and `xs`. Those two are the login. Phase 1 warns if either is missing.
+
+> [!TIP]
+> Don't press **Log out** on Facebook in that browser afterwards. Logging out ends the session the cookies belong to. Closing the tab is fine.
+
+<br>
+
+### Saving them to FBReelz
+
+**Option A: paste them into the player (easiest)**
+
+1. Open the player and log in with your admin password.
+2. Click 🍪 (Cookie Manager), paste the cookies, enter the admin password again and click **Update Cookies**.
+
+The old file is kept as `secrets/cookies.txt.backup.<timestamp>`, and the new one is saved as `600` (owner only).
+
+**Option B: copy the file to the server**
+
+From PowerShell on your PC, after a download:
+
+```powershell
+scp $HOME\Downloads\cookies.txt <user>@<server-ip>:~/fbreelz/secrets/cookies.txt
+```
+
+Then on the server:
+
+```bash
+chmod 600 ~/fbreelz/secrets/cookies.txt
+```
+
+Delete the downloaded copy from your PC afterwards:
+
+```powershell
+Remove-Item $HOME\Downloads\cookies.txt
+```
+
+No restart is needed either way. Phase 1 reads the file each time it runs.
+
+<br>
+
+### When to refresh them
+
+Export and save them again when:
+
+- Phase 1 logs `Not logged in`, `Missing essential cookies` or `No video/reel links found`
+- Facebook asks you to log in again in that browser
+- you change your Facebook password or log out of all sessions
+
+The Cookie Manager shows how many cookies are stored and when they were last updated. Phase 1 also lists expired cookies in `data/fbreelz_phase1.log`. A few expired ones are normal while `c_user` and `xs` are still valid.
 
 <br>
 
@@ -185,7 +257,7 @@ Phase 2 also takes `--max N`, `--force` (download again), `--no-filter` (ignore 
 
 | Symptom | Fix |
 | --- | --- |
-| Phase 1: `Not logged in` or `No video/reel links found` | Cookies have expired. Export them again while logged in and paste them into the Cookie Manager. `data/debug_playwright_saved.html` shows what Playwright saw |
+| Phase 1: `Not logged in` or `No video/reel links found` | Cookies have expired. [Export them again](#getting-your-facebook-cookies) and paste them into the Cookie Manager. `data/debug_playwright_saved.html` shows what Playwright saw |
 | Phase 2 downloads fail | Facebook changes often. Bump `yt-dlp` in `requirements.txt` and run `docker compose up -d --build` |
 | Admin login always says "Invalid password" | `ADMIN_PASSWORD` is empty or wasn't picked up. Set it in `.env`, then `docker compose up -d` |
 | Admin buttons send you back to the login | The container restarted, which clears logins. Log in again |
