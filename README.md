@@ -95,13 +95,18 @@ sudo chown -R $USER:$USER /opt/fbreelz
 cd /opt/fbreelz
 ```
 
-**3. Add your cookies**
+**3. Add your cookies and settings**
 
 ```bash
-mkdir -p secrets
+mkdir -p data secrets
 nano secrets/cookies.txt        # paste the exported cookies
 chmod 600 secrets/cookies.txt
+cp .env.example .env
+nano .env                       # set FBREELZ_HTTP_BASE to http://<this server's IP>
 ```
+
+> [!NOTE]
+> The container runs as UID 1000, the default first user on Ubuntu and Raspberry Pi OS. `data/` and `secrets/cookies.txt` must be owned by that user. Create them yourself before the first `up` so Docker doesn't create them as root.
 
 **4. Build and start the container**
 
@@ -113,13 +118,13 @@ docker compose up -d --build
 
 ```bash
 docker exec -it fbreelz python /app/fbreelz_phase1_graphql.py --max 30
-docker exec -it fbreelz python /app/fbreelz_phase2_resolve.py --download --http-base http://YOUR_SERVER_IP
+docker exec -it fbreelz python /app/fbreelz_phase2_resolve.py --download
 ```
 
 Videos land in `/opt/fbreelz/data/cache/` and playlists in `/opt/fbreelz/data/`.
 
 > [!IMPORTANT]
-> Replace `YOUR_SERVER_IP` with the IP or hostname other devices use to reach this server. It is written into every entry of `fbreelz_cache_http.m3u`.
+> `FBREELZ_HTTP_BASE` is written into every entry of `fbreelz_cache_http.m3u`, so it must be the address other devices use to reach this server.
 
 <br>
 
@@ -161,15 +166,10 @@ cd fbreelz-package
 sudo ./install.sh
 ```
 
-`install.sh` installs NGINX, Node.js and npm, copies the page to `/var/www/fbreelz`, installs the API to `/opt/fbreelz-server` and starts it as the `fbreelz-api` systemd service on `localhost:3001`.
+`install.sh` installs NGINX, Node.js and npm, copies the page to `/var/www/fbreelz`, installs the API to `/opt/fbreelz-server` and starts it as the `fbreelz-api` systemd service (user `www-data`) on `localhost:3001`.
 
-> [!WARNING]
-> `install.sh` replaces `/etc/nginx/sites-available/fbreelz` with its own config, which has no `/cache/` or playlist routes. Put the repo's config back afterwards. It already proxies `/api/` to the Node service:
->
-> ```bash
-> sudo cp /opt/fbreelz/nginx/fbreelz.conf /etc/nginx/sites-available/fbreelz
-> sudo nginx -t && sudo systemctl reload nginx
-> ```
+> [!TIP]
+> Set up [NGINX](#serve-videos-and-playlists-with-nginx) first. `install.sh` keeps an existing `fbreelz` site, and the repo's config already proxies `/api/` to the Node service.
 
 > [!NOTE]
 > The page loads React, Babel and Tailwind from public CDNs, so the viewing device needs internet access.
@@ -194,12 +194,12 @@ Writes `saved_items.json` and `debug_playwright_saved.html` to the data folder.
 | Flag | Default | What it does |
 | --- | --- | --- |
 | `--download` | off | Download MP4s to `data/cache/` and write the cache playlist |
-| `--http-base URL` | none | Also write `fbreelz_cache_http.m3u` with full URLs, e.g. `http://192.168.1.50` |
+| `--http-base URL` | `$FBREELZ_HTTP_BASE` | Also write `fbreelz_cache_http.m3u` with full URLs, e.g. `http://192.168.1.50` |
 | `--max N` | `200` | Maximum items to process |
 | `--no-ytdlp` | off | Skip yt-dlp and write a playlist of the original Facebook links |
-| `--user-agent UA` | none | User agent passed to yt-dlp |
+| `--user-agent UA` | `$FBREELZ_UA` | User agent passed to yt-dlp |
 | `--playlist-title T` | `FBReelz` | Title written into the M3U files |
-| `--input`, `--output`, `--m3u`, `--cache-m3u`, `--http-m3u` | under `/app/data` | Override file paths |
+| `--input`, `--output`, `--m3u`, `--cache-m3u`, `--http-m3u` | under `$FBREELZ_DATA_DIR` | Override file paths |
 
 **Rebuild the HTTP playlist only: `make_cache_playlist.py`** (runs on the host, not in the container)
 
@@ -213,16 +213,20 @@ Use the server root as `--base-url`. The script adds `cache/` itself.
 
 ## Environment variables
 
-Set these under `environment:` in `docker-compose.yml`.
+Set these in `.env` (copied from [`.env.example`](.env.example)). Docker Compose reads it automatically.
 
-| Variable | Default | Used by | Purpose |
-| --- | --- | --- | --- |
-| `TZ` | `Europe/London` | container | Timezone for timestamps |
-| `FBREELZ_DATA_DIR` | `/opt/fbreelz/data` | Phase 1 | Where `saved_items.json` is written |
-| `FBREELZ_COOKIES` | `/opt/fbreelz/secrets/cookies.txt` | Phase 1 | Path to the Netscape cookies file |
-| `FBREELZ_UA` | Chrome 120 on Linux | Phase 1 | Browser user agent for Playwright |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FBREELZ_HTTP_BASE` | none | Base URL written into `fbreelz_cache_http.m3u`, e.g. `http://192.168.1.50`. Without it, only the local playlists are written |
+| `TZ` | `Europe/London` | Timezone for timestamps |
+| `FBREELZ_UA` | Chrome 120 on Linux | Browser user agent for Playwright and yt-dlp |
 
-Phase 2 uses fixed paths under `/app/data` and `/app/secrets`, which are the container's mount points.
+`docker-compose.yml` also sets these to the container's mount points. Only change them for a non-Docker install:
+
+| Variable | Default outside Docker | In Docker |
+| --- | --- | --- |
+| `FBREELZ_DATA_DIR` | `/opt/fbreelz/data` | `/app/data` |
+| `FBREELZ_COOKIES` | `/opt/fbreelz/secrets/cookies.txt` | `/app/secrets/cookies.txt` |
 
 <br>
 
@@ -245,7 +249,7 @@ Phase 2 uses fixed paths under `/app/data` and `/app/secrets`, which are the con
 Add a nightly refresh with `crontab -e` on the host:
 
 ```cron
-15 2 * * * docker exec fbreelz sh -c 'python /app/fbreelz_phase1_graphql.py --max 30 && python /app/fbreelz_phase2_resolve.py --download --http-base http://YOUR_SERVER_IP' >> /opt/fbreelz/data/refresh.log 2>&1
+15 2 * * * docker exec fbreelz sh -c 'python /app/fbreelz_phase1_graphql.py --max 30 && python /app/fbreelz_phase2_resolve.py --download' >> /opt/fbreelz/data/refresh.log 2>&1
 ```
 
 A systemd timer for non-Docker installs is in [`Non Docker Setup/systemd`](Non%20Docker%20Setup/systemd/INSTALL.md).
@@ -259,7 +263,8 @@ A systemd timer for non-Docker installs is in [`Non Docker Setup/systemd`](Non%2
 | `No reel/video links found in HTML` | Cookies have expired. Export them again while logged in to Facebook. Open `data/debug_playwright_saved.html` to see what Playwright saw |
 | `Facebook is not available on this browser` | Phase 1 retries `m.facebook.com` automatically. If both fail, refresh cookies or set `FBREELZ_UA` |
 | Downloads fail with yt-dlp errors | Facebook changes often. Rebuild to pull the latest yt-dlp: `docker compose build --no-cache && docker compose up -d` |
-| VLC shows 404 for every entry | The playlist URLs do not match NGINX. Re-run Phase 2 with the correct `--http-base` |
+| VLC shows 404 for every entry | The playlist URLs do not match NGINX. Fix `FBREELZ_HTTP_BASE` in `.env`, then `docker compose up -d` and re-run Phase 2 |
+| `Permission denied` writing to `/app/data` | `data/` is owned by root, usually because Docker created it or an older version ran as root. Fix with `sudo chown -R 1000:1000 /opt/fbreelz/data` |
 | Web player says "Failed to connect to server" | Check the API: `systemctl status fbreelz-api` and `curl http://localhost:3001/api/health` |
 
 <br>
@@ -269,7 +274,8 @@ A systemd timer for non-Docker installs is in [`Non Docker Setup/systemd`](Non%2
 > [!CAUTION]
 > `cookies.txt` is a live login to your Facebook account. Anyone who reads it can act as you.
 
-- Keep `secrets/` at `chmod 600`. It is gitignored and mounted read-only into the container.
+- Keep `secrets/cookies.txt` at `chmod 600`. It is gitignored and mounted read-only into the container. Phase 2's working copy, `data/cookies_runtime.txt`, is also written as `600`.
+- The container runs as a non-root user (UID 1000).
 - NGINX never serves `secrets/`. Keep it that way if you edit the config.
 - Keep this on your LAN. If you expose it, put it behind a reverse proxy with TLS and authentication.
 - Only download content you have the right to keep, and for personal use.
@@ -289,8 +295,9 @@ A systemd timer for non-Docker installs is in [`Non Docker Setup/systemd`](Non%2
 ├── make_cache_playlist.py    # rebuild the HTTP playlist from resolved_items.json
 ├── nginx/fbreelz.conf        # host NGINX site: player, /cache/, playlists, /api/
 ├── web_ui_setup_script.sh    # generates the web player + Node API package
-├── .env.example
-└── Non Docker Setup/         # venv + systemd install, see its README
+├── tests/test_smoke.py      # python tests/test_smoke.py
+├── .env.example              # copy to .env
+└── Non Docker Setup/         # venv + systemd install guide and timer
 ```
 
 <br>

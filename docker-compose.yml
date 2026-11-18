@@ -1,4 +1,4 @@
-# ## version 1
+# ## version 2
 services:
   fbreelz:
     build: .
@@ -8,4 +8,12 @@ services:
       - ./data:/app/data
       - ./secrets:/app/secrets:ro
     environment:
-      - TZ=Europe/London
+      - TZ=${TZ:-Europe/London}
+      - FBREELZ_DATA_DIR=/app/data
+      - FBREELZ_COOKIES=/app/secrets/cookies.txt
+      - FBREELZ_HTTP_BASE=${FBREELZ_HTTP_BASE:-}
+      - FBREELZ_UA=${FBREELZ_UA:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, playwright; assert os.access('/app/data', os.W_OK)"]
+      interval: 5m
+      timeout: 10s

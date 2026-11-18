@@ -1,5 +1,4 @@
-## version 1
-requests
-beautifulsoup4
-lxml
+## version 2
+playwright==1.64.1
+# yt-dlp is left unpinned on purpose: Facebook changes often and a rebuild should pull the latest extractor fixes
 yt-dlp

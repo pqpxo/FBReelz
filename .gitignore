@@ -3,10 +3,8 @@ cookies.txt
 secrets/
 *.env
 
-## runtime data
-data/cache/
-data/*.json
-data/*.m3u
+## runtime data (includes cookies_runtime.txt)
+data/
 
 ## python
 __pycache__/

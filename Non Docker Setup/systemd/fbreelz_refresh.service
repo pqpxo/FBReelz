@@ -1,4 +1,4 @@
-# ## version 1
+# ## version 2
 [Unit]
 Description=FBReelz - Refresh saved items and download cache
 After=network-online.target
@@ -8,4 +8,4 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=/opt/fbreelz
 Environment=TZ=Europe/London
-ExecStart=/bin/bash -lc 'source /opt/fbreelz/.venv/bin/activate && python /opt/fbreelz/fbreelz_phase1_playwright.py --max 30 && python /opt/fbreelz/fbreelz_phase2_resolve.py --download && python /opt/fbreelz/make_cache_playlist.py --base-url http://YOUR_SERVER_IP/cache/ --out /opt/fbreelz/data/fbreelz_cache_http.m3u'
+ExecStart=/bin/bash -lc 'source /opt/fbreelz/.venv/bin/activate && python /opt/fbreelz/fbreelz_phase1_playwright.py --max 30 && python /opt/fbreelz/fbreelz_phase2_resolve.py --download --http-base http://YOUR_SERVER_IP'

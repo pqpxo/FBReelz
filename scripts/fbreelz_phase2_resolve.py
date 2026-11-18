@@ -1,4 +1,4 @@
-## version 5
+## version 6
 """FBReelz Phase 2: Resolve Phase-1 saved items into a clean list + VLC playlist(s).
 
 v5 changes
@@ -7,17 +7,20 @@ v5 changes
 
 Everything else from v4 is retained.
 
+Paths come from FBREELZ_DATA_DIR / FBREELZ_COOKIES (default /opt/fbreelz/...).
+
 Usage (inside container)
   python /app/fbreelz_phase2_resolve.py --download
 
 Example (HTTP playlist for remote streaming)
-  python /app/fbreelz_phase2_resolve.py --download --http-base http://YOUR_SERVER_IP:8081
+  python /app/fbreelz_phase2_resolve.py --download --http-base http://YOUR_SERVER_IP
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -28,14 +31,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
-DEFAULT_INPUT = Path("/app/data/saved_items.json")
-DEFAULT_OUTPUT = Path("/app/data/resolved_items.json")
-DEFAULT_M3U = Path("/app/data/fbreelz.m3u")
-DEFAULT_CACHE_M3U = Path("/app/data/fbreelz_cache.m3u")
-DEFAULT_HTTP_M3U = Path("/app/data/fbreelz_cache_http.m3u")
-DEFAULT_CACHE_DIR = Path("/app/data/cache")
-DEFAULT_SECRETS_COOKIES = Path("/app/secrets/cookies.txt")
-DEFAULT_RUNTIME_COOKIES = Path("/app/data/cookies_runtime.txt")
+# Same env vars as Phase 1. docker-compose.yml points them at /app/data and /app/secrets.
+DATA_DIR = Path(os.environ.get("FBREELZ_DATA_DIR") or "/opt/fbreelz/data")
+DEFAULT_INPUT = DATA_DIR / "saved_items.json"
+DEFAULT_OUTPUT = DATA_DIR / "resolved_items.json"
+DEFAULT_M3U = DATA_DIR / "fbreelz.m3u"
+DEFAULT_CACHE_M3U = DATA_DIR / "fbreelz_cache.m3u"
+DEFAULT_HTTP_M3U = DATA_DIR / "fbreelz_cache_http.m3u"
+DEFAULT_CACHE_DIR = DATA_DIR / "cache"
+DEFAULT_SECRETS_COOKIES = Path(os.environ.get("FBREELZ_COOKIES") or "/opt/fbreelz/secrets/cookies.txt")
+DEFAULT_RUNTIME_COOKIES = DATA_DIR / "cookies_runtime.txt"
 
 
 @dataclass
@@ -131,6 +136,7 @@ def _ensure_runtime_cookies(secrets_cookies: Path, runtime_cookies: Path) -> Opt
     runtime_cookies.parent.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copyfile(secrets_cookies, runtime_cookies)
+        runtime_cookies.chmod(0o600)  # live session cookies: owner only
         return runtime_cookies
     except Exception:
         return secrets_cookies
@@ -239,12 +245,12 @@ def main() -> int:
     ap.add_argument("--m3u", default=str(DEFAULT_M3U), help=f"Path to write VLC playlist (default: {DEFAULT_M3U})")
     ap.add_argument("--cache-m3u", default=str(DEFAULT_CACHE_M3U), help=f"Path to write cache playlist (default: {DEFAULT_CACHE_M3U})")
     ap.add_argument("--http-m3u", default=str(DEFAULT_HTTP_M3U), help=f"Path to write HTTP cache playlist (default: {DEFAULT_HTTP_M3U})")
-    ap.add_argument("--http-base", default=None, help="Base URL for HTTP playlist, e.g. http://YOUR_SERVER_IP:8081")
+    ap.add_argument("--http-base", default=os.environ.get("FBREELZ_HTTP_BASE") or None, help="Base URL for HTTP playlist, e.g. http://YOUR_SERVER_IP (default: $FBREELZ_HTTP_BASE)")
     ap.add_argument("--max", type=int, default=200, help="Max items to resolve (default: 200)")
     ap.add_argument("--no-ytdlp", action="store_true", help="Skip yt-dlp resolution")
-    ap.add_argument("--download", action="store_true", help="Download media to /app/data/cache")
+    ap.add_argument("--download", action="store_true", help=f"Download media to {DEFAULT_CACHE_DIR}")
     ap.add_argument("--playlist-title", default="FBReelz", help="Playlist title")
-    ap.add_argument("--user-agent", default=None, help="User-Agent to pass to yt-dlp")
+    ap.add_argument("--user-agent", default=os.environ.get("FBREELZ_UA") or None, help="User-Agent to pass to yt-dlp (default: $FBREELZ_UA)")
     args = ap.parse_args()
 
     input_path = Path(args.input)

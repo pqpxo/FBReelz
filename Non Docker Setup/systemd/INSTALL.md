@@ -8,4 +8,4 @@ sudo systemctl enable --now fbreelz_refresh.timer
 systemctl list-timers | grep fbreelz
 ```
 
-> Edit the `--base-url` in the service ExecStart to match the new host IP / domain.
+> Edit `--http-base` in the service `ExecStart` to match your server IP or hostname.

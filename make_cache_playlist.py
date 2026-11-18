@@ -1,4 +1,4 @@
-## version 2
+## version 3
 #!/usr/bin/env python3
 """
 Create an M3U playlist that points at your *cached* FBReelz MP4 files.
@@ -73,7 +73,7 @@ def main() -> int:
 
     playable: list[tuple[dict, str]] = []
     for it in items:
-        cached = it.get("downloaded_file") or it.get("cached_file") or ""
+        cached = it.get("downloaded_path") or it.get("downloaded_file") or it.get("cached_file") or ""
         if cached:
             fname = Path(cached).name
         else:

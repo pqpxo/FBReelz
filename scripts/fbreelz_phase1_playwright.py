@@ -113,10 +113,8 @@ def main(max_items: int, headed: bool) -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
         context = browser.new_context(
-            user_agent=os.environ.get(
-                "FBREELZ_UA",
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            )
+            user_agent=os.environ.get("FBREELZ_UA")
+            or "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
 
         if cookies:

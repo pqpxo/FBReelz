@@ -419,7 +419,7 @@ app.get('/api/video/:filename', async (req, res) => {
     const filepath = path.join(VIDEO_DIR, filename);
 
     const normalizedPath = path.normalize(filepath);
-    if (!normalizedPath.startsWith(VIDEO_DIR)) {
+    if (!normalizedPath.startsWith(VIDEO_DIR + path.sep)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -566,7 +566,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=www-data
 WorkingDirectory=/opt/fbreelz-server
 ExecStart=/usr/bin/node server.js
 Restart=always
@@ -618,9 +618,13 @@ echo "Installing backend dependencies..."
 cd /opt/fbreelz-server
 npm install
 
-# Setup NGINX
+# Setup NGINX (keep an existing FBReelz site: the repo's nginx/fbreelz.conf also serves /cache/ and playlists)
 echo "Configuring NGINX..."
-cp ../nginx-fbreelz.conf /etc/nginx/sites-available/fbreelz
+if [ -e /etc/nginx/sites-available/fbreelz ]; then
+    echo "Keeping existing /etc/nginx/sites-available/fbreelz"
+else
+    cp ../nginx-fbreelz.conf /etc/nginx/sites-available/fbreelz
+fi
 ln -sf /etc/nginx/sites-available/fbreelz /etc/nginx/sites-enabled/
 
 # Setup systemd service
@@ -629,10 +633,9 @@ cp ../fbreelz-api.service /etc/systemd/system/
 
 # Set permissions
 echo "Setting permissions..."
+# Only touch the web root. /opt/fbreelz holds secrets/cookies.txt, which must stay private.
 chown -R www-data:www-data /var/www/fbreelz
-chown -R www-data:www-data /opt/fbreelz
 chmod -R 755 /var/www/fbreelz
-chmod -R 755 /opt/fbreelz
 
 # Enable and start services
 echo "Starting services..."
