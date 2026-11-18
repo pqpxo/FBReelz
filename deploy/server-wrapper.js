@@ -10,9 +10,9 @@
 const express = require('express');
 const fs = require('fs').promises;
 const path = require('path');
-const cors = require('cors');
 const { exec } = require('child_process');
 const util = require('util');
+const crypto = require('crypto');
 
 const execPromise = util.promisify(exec);
 
@@ -28,14 +28,33 @@ const SCRIPTS_DIR = process.env.SCRIPTS_DIR || '/app/scripts';
 // Import cleanup module
 const cleanup = require('./cleanup-watched');
 
-// Admin password - CHANGE THIS!
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+// Admin password comes from .env. No default: admin is disabled until it is set.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+if (!ADMIN_PASSWORD) console.warn('ADMIN_PASSWORD is not set: admin controls are disabled');
+
+// ponytail: in-memory sessions, everyone logs in again after a restart
+const adminTokens = new Set();
+
+function passwordMatches(password) {
+  if (!ADMIN_PASSWORD || typeof password !== 'string') return false;
+  const a = crypto.createHash('sha256').update(password).digest();
+  const b = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+function requireAdmin(req, res, next) {
+  const token = (req.get('Authorization') || '').replace(/^Bearer /, '');
+  if (token && adminTokens.has(token)) return next();
+  res.status(401).json({ success: false, error: 'Admin login required' });
+}
 
 const app = express();
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// Every admin route except login needs a session token
+app.use('/api/admin', (req, res, next) => (req.path === '/login' ? next() : requireAdmin(req, res, next)));
 
 // Serve static files for web frontend
 app.use(express.static(WEB_DIR));
@@ -75,14 +94,18 @@ app.get('/api/videos', async (req, res) => {
           title: metaData.title || metadata.title,
           description: metaData.description || '',
           duration: metaData.duration || null,
-          url: metaData.url || ''
+          url: metaData.url || '',
+          videoId: metaData.video_id ? String(metaData.video_id) : ''
         };
       } catch (e) {
         // No metadata file, use filename as title
       }
 
+      // Stable ID = Facebook video ID (what cleanup and the Phase 2 filter match on)
+      const idMatch = filename.match(/_(\d+)\.(mp4|mkv|webm)$/i);
+
       return {
-        id: index + 1,
+        id: metadata.videoId || (idMatch ? idMatch[1] : filename),
         filename: filename,
         title: metadata.title,
         description: metadata.description,
@@ -111,12 +134,12 @@ app.get('/api/videos', async (req, res) => {
 // Stream individual video file
 app.get('/api/video/:filename', async (req, res) => {
   try {
-    const filename = decodeURIComponent(req.params.filename);
+    // Express has already decoded the param; decoding again would allow %252F tricks
+    const filename = req.params.filename;
     const filepath = path.join(VIDEO_DIR, filename);
 
-    // Security check: prevent directory traversal
-    const normalizedPath = path.normalize(filepath);
-    if (!normalizedPath.startsWith(VIDEO_DIR)) {
+    // Security check: plain file name inside VIDEO_DIR only
+    if (filename !== path.basename(filename) || !path.resolve(filepath).startsWith(path.resolve(VIDEO_DIR) + path.sep)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -170,8 +193,10 @@ app.get('/api/health', (req, res) => {
 app.post('/api/admin/login', (req, res) => {
   const { password } = req.body;
 
-  if (password === ADMIN_PASSWORD) {
-    res.json({ success: true, message: 'Login successful' });
+  if (passwordMatches(password)) {
+    const token = crypto.randomBytes(32).toString('hex');
+    adminTokens.add(token);
+    res.json({ success: true, message: 'Login successful', token });
   } else {
     res.status(401).json({ success: false, error: 'Invalid password' });
   }
@@ -254,7 +279,7 @@ app.post('/api/admin/cookies', async (req, res) => {
   try {
     const { cookies, password } = req.body;
 
-    if (password !== ADMIN_PASSWORD) {
+    if (!passwordMatches(password)) {
       return res.status(401).json({
         success: false,
         error: 'Invalid admin password'
@@ -272,13 +297,14 @@ app.post('/api/admin/cookies', async (req, res) => {
     try {
       const existingCookies = await fs.readFile(COOKIES_FILE, 'utf8');
       const backupPath = COOKIES_FILE + '.backup.' + Date.now();
-      await fs.writeFile(backupPath, existingCookies);
+      await fs.writeFile(backupPath, existingCookies, { mode: 0o600 });
     } catch (backupError) {
       // If backup fails, it's okay
     }
 
-    // Write new cookies
-    await fs.writeFile(COOKIES_FILE, cookies, 'utf8');
+    // Write new cookies (owner-only: they are a live Facebook login)
+    await fs.writeFile(COOKIES_FILE, cookies, { encoding: 'utf8', mode: 0o600 });
+    await fs.chmod(COOKIES_FILE, 0o600);
 
     const lines = cookies.split('\n').filter(line => line.trim() && !line.startsWith('#'));
 

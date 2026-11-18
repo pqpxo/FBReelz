@@ -467,8 +467,8 @@ def main(args: argparse.Namespace) -> int:
     logger.info(f"⏱️  Duration: {duration_mins}m {duration_secs}s")
     logger.info("=" * 60)
     
-    # Send Pushover notification
-    if not args.no_pushover:
+    # Send Pushover notification (only when both keys are set in .env)
+    if not args.no_pushover and PUSHOVER_APP_TOKEN and PUSHOVER_USER_KEY:
         message = (
             f"⏰ Started: {start_datetime.strftime('%H:%M:%S')}\n"
             f"⏱️ Duration: {duration_mins}m {duration_secs}s\n"

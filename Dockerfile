@@ -8,7 +8,7 @@
 # Run:
 #   docker-compose up -d
 
-FROM python:3.12-slim
+FROM python:3.12-slim-trixie
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -90,6 +90,7 @@ COPY fbreelz_phase1_playwright.py /app/scripts/
 COPY fbreelz_phase2_resolve.py /app/scripts/
 COPY make_cache_playlist.py /app/scripts/
 COPY cleaned_videos_filter.py /app/scripts/
+COPY tests/ /app/tests/
 
 # Copy deployment configurations
 COPY deploy/supervisord.conf /etc/supervisor/conf.d/fbreelz.conf
@@ -106,7 +107,7 @@ EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:3001/api/health || exit 1
+    CMD node -e "fetch('http://localhost:'+(process.env.PORT||3001)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Start with entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]

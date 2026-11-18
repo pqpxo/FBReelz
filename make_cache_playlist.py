@@ -16,14 +16,14 @@ Usage:
   python3 make_cache_playlist.py
 
   # Full URLs (for remote streaming)
-  python3 make_cache_playlist.py --base-url http://192.168.1.226:8081
+  python3 make_cache_playlist.py --base-url http://YOUR_SERVER_IP:8081
 
   # Custom paths
   python3 make_cache_playlist.py \
     --resolved /opt/fbreelz/data/resolved_items.json \
     --cache-dir /opt/fbreelz/data/cache \
     --output /opt/fbreelz/data/my_playlist.m3u \
-    --base-url http://192.168.1.226:8081
+    --base-url http://YOUR_SERVER_IP:8081
 
   # Verbose mode
   python3 make_cache_playlist.py --verbose
@@ -32,6 +32,7 @@ Usage:
 import argparse
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -45,6 +46,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+DATA_DIR = Path(os.environ.get("FBREELZ_DATA_DIR", "/opt/fbreelz/data"))
 
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv'}
 
@@ -77,7 +80,7 @@ def _find_video_file(item: Dict, cache_dir: Path) -> Optional[Path]:
     """Find video file for item using multiple strategies."""
     
     # Strategy 1: Use downloaded_path field (Phase 2 v6)
-    for field in ['downloaded_path', 'downloaded_file', 'cached_file']:
+    for field in ['downloaded_path', 'downloaded_file', 'cached_file', 'filename']:
         path_str = item.get(field)
         if path_str:
             p = Path(path_str)
@@ -154,7 +157,7 @@ Examples:
   python3 make_cache_playlist.py
 
   # Create playlist with full URLs for remote streaming
-  python3 make_cache_playlist.py --base-url http://192.168.1.100:8081
+  python3 make_cache_playlist.py --base-url http://YOUR_SERVER_IP:8081
 
   # Verbose mode with diagnostics
   python3 make_cache_playlist.py --verbose
@@ -162,23 +165,23 @@ Examples:
     )
     ap.add_argument(
         "--resolved",
-        default="/opt/fbreelz/data/resolved_items.json",
-        help="Path to resolved_items.json (default: /opt/fbreelz/data/resolved_items.json)"
+        default=str(DATA_DIR / "resolved_items.json"),
+        help="Path to resolved_items.json (default: $FBREELZ_DATA_DIR/resolved_items.json)"
     )
     ap.add_argument(
         "--cache-dir",
-        default="/opt/fbreelz/data/cache",
-        help="Cache directory with MP4s (default: /opt/fbreelz/data/cache)"
+        default=str(DATA_DIR / "cache"),
+        help="Cache directory with MP4s (default: $FBREELZ_DATA_DIR/cache)"
     )
     ap.add_argument(
         "--output",
-        default="/opt/fbreelz/data/fbreelz_cache_http.m3u",
-        help="Output M3U path (default: /opt/fbreelz/data/fbreelz_cache_http.m3u)"
+        default=str(DATA_DIR / "fbreelz_cache_http.m3u"),
+        help="Output M3U path (default: $FBREELZ_DATA_DIR/fbreelz_cache_http.m3u)"
     )
     ap.add_argument(
         "--base-url",
         default="",
-        help="Base URL for full paths (e.g., http://192.168.1.100:8081)"
+        help="Base URL for full paths (e.g., http://YOUR_SERVER_IP:8081)"
     )
     ap.add_argument(
         "--playlist-title",
@@ -216,7 +219,8 @@ Examples:
         logger.error(f"Failed to parse JSON: {e}")
         return 1
 
-    items = data.get("items", []) or []
+    # Phase 2 v8 writes "videos"; older versions wrote "items"
+    items = data.get("videos") or data.get("items") or []
     logger.info(f"Found {len(items)} items in resolved_items.json")
 
     # Get cache statistics

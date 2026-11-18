@@ -1,5 +1,12 @@
 const { useState, useRef, useEffect } = React;
 
+// Small async wrapper over localStorage (private windows can block it)
+const storage = {
+    get: async (key) => { try { const v = localStorage.getItem(key); return v === null ? null : { value: v }; } catch (e) { return null; } },
+    set: async (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} },
+    remove: async (key) => { try { localStorage.removeItem(key); } catch (e) {} }
+};
+
 // Icon Components
 const Play = ({ className }) => (
     <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -111,24 +118,42 @@ function FBReelsClone() {
 
         // Show login dialog on first load if not authenticated
         setTimeout(() => {
-            if (!isAuthenticated) {
+            if (!adminToken.current) {
                 setShowLogin(true);
             }
         }, 1000);
     }, []);
 
+    const adminToken = useRef('');
+
     const loadAuthStatus = async () => {
-        try {
-            const result = await window.storage.get('admin-authenticated');
-            if (result && result.value === 'true') setIsAuthenticated(true);
-        } catch (e) {}
+        const result = await storage.get('admin-token');
+        if (result && result.value) {
+            adminToken.current = result.value;
+            setIsAuthenticated(true);
+        }
+    };
+
+    // fetch() for admin routes: sends the session token, drops back to login on 401
+    const adminFetch = async (url, options = {}) => {
+        const response = await fetch(url, {
+            ...options,
+            headers: { ...(options.headers || {}), Authorization: `Bearer ${adminToken.current}` }
+        });
+        if (response.status === 401) {
+            adminToken.current = '';
+            setIsAuthenticated(false);
+            setShowLogin(true);
+            await storage.remove('admin-token');
+        }
+        return response;
     };
 
     const loadThemeSettings = async () => {
         try {
-            const t = await window.storage.get('theme');
+            const t = await storage.get('theme');
             if (t && t.value) setTheme(t.value);
-            const c = await window.storage.get('colorScheme');
+            const c = await storage.get('colorScheme');
             if (c && c.value) setColorScheme(c.value);
         } catch (e) {}
     };
@@ -142,11 +167,12 @@ function FBReelsClone() {
             });
             const data = await response.json();
             if (data.success) {
+                adminToken.current = data.token;
                 setIsAuthenticated(true);
                 setShowLogin(false);
                 setPassword('');
                 setLoginError('');
-                await window.storage.set('admin-authenticated', 'true');
+                await storage.set('admin-token', data.token);
                 addNotification('✓ Logged in', 'success');
             } else {
                 setLoginError('Invalid password');
@@ -157,20 +183,21 @@ function FBReelsClone() {
     };
 
     const handleLogout = async () => {
+        adminToken.current = '';
         setIsAuthenticated(false);
-        await window.storage.set('admin-authenticated', 'false');
+        await storage.remove('admin-token');
         addNotification('Logged out', 'info');
     };
 
     const toggleTheme = async () => {
         const newTheme = theme === 'dark' ? 'light' : 'dark';
         setTheme(newTheme);
-        await window.storage.set('theme', newTheme);
+        await storage.set('theme', newTheme);
     };
 
     const changeColorScheme = async (scheme) => {
         setColorScheme(scheme);
-        await window.storage.set('colorScheme', scheme);
+        await storage.set('colorScheme', scheme);
         setShowColorMenu(false);
     };
 
@@ -178,7 +205,7 @@ function FBReelsClone() {
     const loadCookieInfo = async () => {
         try {
             setCookieLoading(true);
-            const response = await fetch(`${API_BASE_URL}/api/admin/cookies`);
+            const response = await adminFetch(`${API_BASE_URL}/api/admin/cookies`);
             const data = await response.json();
             
             if (data.success) {
@@ -218,7 +245,7 @@ function FBReelsClone() {
 
         try {
             setCookieLoading(true);
-            const response = await fetch(`${API_BASE_URL}/api/admin/cookies`, {
+            const response = await adminFetch(`${API_BASE_URL}/api/admin/cookies`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -381,7 +408,7 @@ function FBReelsClone() {
         setShowConfirmDialog(false);
         addNotification(getActionDetails(action).startMessage, 'info');
         try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/${action}`, { method: 'POST' });
+            const response = await adminFetch(`${API_BASE_URL}/api/admin/${action}`, { method: 'POST' });
             const text = await response.text();
             const data = JSON.parse(text);
             if (data.success) {
